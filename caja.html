@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Caja & Facturación | Sistema Restaurante</title>
+  <link rel="stylesheet" href="/src/css/styles.css" />
+</head>
+<body>
+  <div class="bg-orbs"></div>
+
+  <!-- LOGIN CAJA -->
+  <div id="login-screen" class="login-page">
+    <div class="login-card">
+      <div class="login-logo">💰</div>
+      <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;text-align:center;margin-bottom:8px">Caja & Facturación</h1>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-bottom:32px">Ingresa el PIN para acceder</p>
+      <div class="form-group">
+        <label class="form-label">PIN de Caja</label>
+        <input type="password" class="form-input" id="pin-input"
+          placeholder="••••" maxlength="6" autocomplete="off"
+          style="text-align:center;font-size:1.5rem;letter-spacing:0.3em"
+          onkeydown="if(event.key==='Enter') loginCaja()" />
+      </div>
+      <button class="btn btn-secondary btn-full btn-lg" onclick="loginCaja()">💰 Ingresar a Caja</button>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.75rem;margin-top:16px">
+        PIN demo: <code style="background:var(--black-3);padding:2px 8px;border-radius:4px">5678</code>
+      </p>
+      <div style="text-align:center;margin-top:24px">
+        <a href="/" style="color:var(--text-muted);font-size:0.8rem;text-decoration:none">← Volver al inicio</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD CAJA -->
+  <div id="caja-dashboard" class="hidden">
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <div class="navbar-brand">
+          <div class="navbar-logo">💰</div>
+          <div>
+            <div class="navbar-title">Caja & Facturación</div>
+            <div class="navbar-subtitle" id="caja-date">—</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-12">
+          <div class="flex items-center gap-8">
+            <span class="pulse-dot yellow"></span>
+            <span style="font-size:0.8rem;color:var(--text-muted)">Activo</span>
+          </div>
+          <span class="navbar-badge caja">Caja</span>
+          <button class="btn btn-ghost btn-sm" onclick="logoutCaja()">Salir</button>
+        </div>
+      </div>
+    </nav>
+
+    <main style="padding:24px 0 60px">
+      <div class="container">
+
+        <!-- RESUMEN DEL DÍA -->
+        <div class="grid-4 mb-28">
+          <div class="card" style="border-color:var(--yellow-border)">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ventas hoy</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--yellow)" id="stat-ventas">$0</div>
+          </div>
+          <div class="card">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pedidos cobrados</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--text-primary)" id="stat-cobrados">0</div>
+          </div>
+          <div class="card">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pendientes de cobro</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--salmon)" id="stat-pendientes">0</div>
+          </div>
+          <div class="card">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">IVA recaudado</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--text-secondary)" id="stat-iva">$0</div>
+          </div>
+        </div>
+
+        <!-- TABS -->
+        <div class="tabs mb-24">
+          <button class="tab-btn active" onclick="setTab('pendientes', this)">⏳ Por cobrar</button>
+          <button class="tab-btn" onclick="setTab('pagados', this)">✅ Cobrados hoy</button>
+          <button class="tab-btn" onclick="setTab('transferencias', this)">📱 Transferencias</button>
+        </div>
+
+        <!-- LISTA DE PEDIDOS -->
+        <div id="caja-orders-list"><!-- dinámico --></div>
+        <div id="caja-empty" class="empty-state hidden">
+          <div class="empty-state-icon">💰</div>
+          <h3>Sin pedidos aquí</h3>
+          <p>Los pedidos listos para cobrar aparecerán aquí</p>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL FACTURA / COBRO -->
+  <div class="modal-overlay" id="factura-modal">
+    <div class="modal" style="max-width:580px;max-height:92vh;overflow-y:auto" id="factura-content">
+      <!-- Se llena dinámicamente -->
+    </div>
+  </div>
+
+  <!-- MODAL COMPROBANTE TRANSFERENCIA -->
+  <div class="modal-overlay" id="comprobante-modal">
+    <div class="modal" style="max-width:480px;text-align:center">
+      <div class="modal-header">
+        <h3 style="font-family:var(--font-display)">📎 Comprobante de Pago</h3>
+        <button class="modal-close" onclick="closeComprobante()">✕</button>
+      </div>
+      <img id="comprobante-img" src="" alt="Comprobante" style="max-width:100%;border-radius:var(--radius-md);margin:16px 0" />
+      <div id="no-comprobante" class="hidden">
+        <div style="font-size:3rem;margin:24px 0">📄</div>
+        <p style="color:var(--text-muted)">El cliente aún no ha subido el comprobante</p>
+      </div>
+      <div class="grid-2 mt-16">
+        <button class="btn btn-outline" onclick="closeComprobante()">Cerrar</button>
+        <button class="btn btn-primary" id="verify-transfer-btn">✅ Verificar Pago</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .pedido-row {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      transition: var(--transition);
+      animation: slideInLeft 0.3s ease;
+    }
+    .pedido-row:hover { background: var(--card-hover); border-color: rgba(255,255,255,0.12); }
+    .pedido-row.pagado { border-left: 4px solid var(--status-done); opacity: 0.7; }
+    .pedido-row.pendiente { border-left: 4px solid var(--salmon); }
+    .pedido-row.transferencia-pendiente { border-left: 4px solid var(--yellow); }
+
+    .pedido-info { flex: 1; }
+    .pedido-num  { font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: var(--salmon); }
+    .pedido-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .pedido-total { font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; }
+    .pedido-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+
+    /* FACTURA IMPRIMIBLE */
+    .factura-header { text-align: center; margin-bottom: 24px; }
+    .factura-logo-print { font-size: 2.5rem; margin-bottom: 8px; }
+    .factura-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; }
+    .factura-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+    .factura-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.875rem; }
+    .factura-table th { background: var(--black-3); padding: 10px 12px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+    .factura-table td { padding: 10px 12px; border-bottom: 1px solid var(--card-border); vertical-align: middle; }
+    .factura-table tr:last-child td { border-bottom: none; }
+
+    .factura-totals { background: var(--black-3); border-radius: var(--radius-md); padding: 16px; }
+    .factura-total-row { display: flex; justify-content: space-between; font-size: 0.875rem; color: var(--text-secondary); padding: 4px 0; }
+    .factura-total-final { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); border-top: 1px solid var(--card-border); padding-top: 12px; margin-top: 8px; }
+
+    .cobro-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+    .cobro-method-btn {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--card-border);
+      background: var(--black-3);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-family: var(--font-primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: var(--transition);
+      text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .cobro-method-btn:hover { border-color: var(--salmon); background: var(--salmon-glow); color: var(--salmon); }
+    .cobro-method-btn.selected {
+      border-color: var(--salmon);
+      background: var(--salmon-glow);
+      color: var(--salmon);
+      box-shadow: var(--shadow-salmon);
+    }
+    .cobro-method-btn .method-icon { font-size: 1.8rem; }
+
+    .efectivo-calc { background: var(--black-3); border-radius: var(--radius-md); padding: 16px; margin-top: 16px; }
+    .vuelto-display { font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; color: var(--yellow); text-align: center; padding: 8px 0; }
+
+    @media print {
+      * { color: black !important; background: white !important; border-color: #ccc !important; }
+      .no-print, .navbar, button { display: none !important; }
+      .modal-overlay { position: relative; background: none; padding: 0; }
+      .modal { box-shadow: none; max-height: none; }
+    }
+  </style>
+
+  <script type="module" src="/src/js/caja.js"></script>
+</body>
+</html>

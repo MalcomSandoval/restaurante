@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin & QR | Sistema Restaurante</title>
+  <link rel="stylesheet" href="/src/css/styles.css" />
+</head>
+<body>
+  <div class="bg-orbs"></div>
+
+  <!-- LOGIN ADMIN -->
+  <div id="login-screen" class="login-page">
+    <div class="login-card">
+      <div class="login-logo">⚙️</div>
+      <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;text-align:center;margin-bottom:8px">Panel Administrador</h1>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-bottom:32px">Gestión de mesas y códigos QR</p>
+      <div class="form-group">
+        <label class="form-label">PIN de Administrador</label>
+        <input type="password" class="form-input" id="pin-input"
+          placeholder="••••" maxlength="6"
+          style="text-align:center;font-size:1.5rem;letter-spacing:0.3em"
+          onkeydown="if(event.key==='Enter') loginAdmin()" />
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" onclick="loginAdmin()">⚙️ Ingresar</button>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.75rem;margin-top:16px">
+        PIN demo: <code style="background:var(--black-3);padding:2px 8px;border-radius:4px">0000</code>
+      </p>
+      <div style="text-align:center;margin-top:24px">
+        <a href="/" style="color:var(--text-muted);font-size:0.8rem;text-decoration:none">← Volver al inicio</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD ADMIN -->
+  <div id="admin-dashboard" class="hidden">
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <div class="navbar-brand">
+          <div class="navbar-logo">⚙️</div>
+          <div>
+            <div class="navbar-title">Panel Admin</div>
+            <div class="navbar-subtitle">Gestión de mesas y QR</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-12">
+          <a href="/" class="btn btn-ghost btn-sm">🏠 Inicio</a>
+          <button class="btn btn-ghost btn-sm" onclick="logoutAdmin()">Salir</button>
+        </div>
+      </div>
+    </nav>
+
+    <main style="padding:32px 0">
+      <div class="container">
+
+        <!-- CONFIGURACIÓN DEL RESTAURANTE -->
+        <div class="card mb-32">
+          <h2 style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;margin-bottom:20px">
+            🏪 Configuración del Restaurante
+          </h2>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Nombre del restaurante</label>
+              <input type="text" class="form-input" id="conf-nombre" placeholder="Ej: La Casa del Sabor" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de mesas</label>
+              <input type="number" class="form-input" id="conf-mesas" min="1" max="50" value="10" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">URL del sistema (para QR)</label>
+              <input type="text" class="form-input" id="conf-url" placeholder="https://mi-restaurante.vercel.app" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Dirección / Ciudad</label>
+              <input type="text" class="form-input" id="conf-ciudad" placeholder="Bogotá, Colombia" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveConfig()">💾 Guardar configuración</button>
+        </div>
+
+        <!-- GENERADOR DE QR -->
+        <div class="flex items-center justify-between mb-20">
+          <div>
+            <h2 style="font-family:var(--font-display);font-size:1.2rem;font-weight:700">
+              📲 Códigos QR de Mesas
+            </h2>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-top:4px">
+              Imprime estos QR y colócalos en cada mesa. Los clientes los escanean para ver el menú.
+            </p>
+          </div>
+          <button class="btn btn-secondary" onclick="downloadAllQR()">⬇️ Descargar todos</button>
+        </div>
+
+        <!-- GRID DE QR -->
+        <div class="grid-4" id="qr-grid">
+          <!-- Se genera dinámicamente -->
+        </div>
+
+        <div class="divider" style="margin:40px 0"></div>
+
+        <!-- DATOS DE TRANSFERENCIA -->
+        <div class="card">
+          <h2 style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;margin-bottom:20px">
+            🏦 Datos de Pago por Transferencia
+          </h2>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Banco</label>
+              <input type="text" class="form-input" id="tf-banco" placeholder="Ej: Bancolombia" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo de cuenta</label>
+              <select class="form-select" id="tf-tipo">
+                <option>Cuenta de Ahorros</option>
+                <option>Cuenta Corriente</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de cuenta</label>
+              <input type="text" class="form-input" id="tf-cuenta" placeholder="123-456789-00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nequi</label>
+              <input type="tel" class="form-input" id="tf-nequi" placeholder="+57 300 000 0000" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Daviplata</label>
+              <input type="tel" class="form-input" id="tf-daviplata" placeholder="+57 300 000 0001" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">NIT del negocio</label>
+              <input type="text" class="form-input" id="tf-nit" placeholder="900.123.456-7" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveTransferConfig()">💾 Guardar datos de pago</button>
+        </div>
+
+        <div class="divider" style="margin:40px 0"></div>
+
+        <!-- ACCESO RÁPIDO -->
+        <h2 style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;margin-bottom:20px">
+          🔗 Acceso Rápido a Portales
+        </h2>
+        <div class="grid-3">
+          <a href="/cocina.html" target="_blank" class="card" style="text-decoration:none;text-align:center">
+            <div style="font-size:2rem;margin-bottom:8px">👨‍🍳</div>
+            <div style="font-weight:600">Portal Cocina</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">PIN: 1234</div>
+          </a>
+          <a href="/caja.html" target="_blank" class="card" style="text-decoration:none;text-align:center">
+            <div style="font-size:2rem;margin-bottom:8px">💰</div>
+            <div style="font-weight:600">Portal Caja</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">PIN: 5678</div>
+          </a>
+          <a href="/domicilio.html" target="_blank" class="card" style="text-decoration:none;text-align:center">
+            <div style="font-size:2rem;margin-bottom:8px">🛵</div>
+            <div style="font-weight:600">Pedidos Domicilio</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Acceso libre</div>
+          </a>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL QR AMPLIADO -->
+  <div class="modal-overlay" id="qr-modal">
+    <div class="modal" style="text-align:center;max-width:380px">
+      <div class="modal-header">
+        <h3 id="qr-modal-title" style="font-family:var(--font-display)">QR Mesa #1</h3>
+        <button class="modal-close" onclick="document.getElementById('qr-modal').classList.remove('active')">✕</button>
+      </div>
+      <div id="qr-modal-code" style="margin:20px auto;width:200px;height:200px;background:white;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:12px"></div>
+      <p id="qr-modal-url" style="font-size:0.75rem;color:var(--text-muted);margin:12px 0;word-break:break-all"></p>
+      <div class="grid-2 mt-16">
+        <button class="btn btn-outline" onclick="document.getElementById('qr-modal').classList.remove('active')">Cerrar</button>
+        <button class="btn btn-primary" id="qr-download-btn">⬇️ Descargar</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .qr-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      text-align: center;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+    .qr-card:hover {
+      border-color: var(--salmon-border);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-salmon);
+    }
+    .qr-container {
+      width: 120px;
+      height: 120px;
+      background: white;
+      border-radius: var(--radius-sm);
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+    .qr-container canvas, .qr-container img { max-width: 100%; }
+    .qr-mesa-num {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .qr-mesa-cap {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+  </style>
+
+  <script type="module" src="/src/js/admin-qr.js"></script>
+</body>
+</html>

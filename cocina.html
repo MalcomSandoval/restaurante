@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cocina | Sistema Restaurante</title>
+  <link rel="stylesheet" href="/src/css/styles.css" />
+</head>
+<body>
+  <div class="bg-orbs"></div>
+
+  <!-- LOGIN COCINA -->
+  <div id="login-screen" class="login-page">
+    <div class="bg-orbs"></div>
+    <div class="login-card">
+      <div class="login-logo">👨‍🍳</div>
+      <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;text-align:center;margin-bottom:8px">
+        Portal de Cocina
+      </h1>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-bottom:32px">
+        Ingresa el PIN para acceder
+      </p>
+      <div class="form-group">
+        <label class="form-label">PIN de Acceso</label>
+        <input type="password" class="form-input" id="pin-input"
+          placeholder="••••" maxlength="6" autocomplete="off"
+          style="text-align:center;font-size:1.5rem;letter-spacing:0.3em"
+          onkeydown="if(event.key==='Enter') loginCocina()" />
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" onclick="loginCocina()">
+        🍳 Ingresar
+      </button>
+      <p style="text-align:center;color:var(--text-muted);font-size:0.75rem;margin-top:16px">
+        PIN demo: <code style="background:var(--black-3);padding:2px 8px;border-radius:4px">1234</code>
+      </p>
+      <div style="text-align:center;margin-top:24px">
+        <a href="/" style="color:var(--text-muted);font-size:0.8rem;text-decoration:none">← Volver al inicio</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD COCINA (oculto hasta login) -->
+  <div id="cocina-dashboard" class="hidden">
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <div class="navbar-brand">
+          <div class="navbar-logo">👨‍🍳</div>
+          <div>
+            <div class="navbar-title">Cocina</div>
+            <div class="navbar-subtitle" id="cocina-time">--:--</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-12">
+          <div class="flex items-center gap-8">
+            <span class="pulse-dot salmon"></span>
+            <span style="font-size:0.8rem;color:var(--text-muted)" id="live-indicator">En vivo</span>
+          </div>
+          <span class="navbar-badge cocina">Cocina</span>
+          <button class="btn btn-ghost btn-sm" onclick="logoutCocina()">Salir</button>
+        </div>
+      </div>
+    </nav>
+
+    <main style="padding:24px 0 40px">
+      <div class="container">
+
+        <!-- STATS RÁPIDAS -->
+        <div class="grid-4 mb-24" id="cocina-stats">
+          <div class="card" style="text-align:center">
+            <div style="font-size:2rem;font-weight:800;color:var(--yellow)" id="stat-espera">0</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">En Espera</div>
+          </div>
+          <div class="card" style="text-align:center">
+            <div style="font-size:2rem;font-weight:800;color:var(--salmon)" id="stat-proceso">0</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">En Proceso</div>
+          </div>
+          <div class="card" style="text-align:center">
+            <div style="font-size:2rem;font-weight:800;color:#4ECDC4" id="stat-entregando">0</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">Entregando</div>
+          </div>
+          <div class="card" style="text-align:center">
+            <div style="font-size:2rem;font-weight:800;color:var(--status-done)" id="stat-done">0</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">Completados hoy</div>
+          </div>
+        </div>
+
+        <!-- FILTROS -->
+        <div class="tabs mb-24" id="filter-tabs">
+          <button class="tab-btn active" data-filter="activos" onclick="setFilter('activos', this)">
+            🔥 Activos
+          </button>
+          <button class="tab-btn" data-filter="en_espera" onclick="setFilter('en_espera', this)">
+            ⏳ En Espera
+          </button>
+          <button class="tab-btn" data-filter="en_proceso" onclick="setFilter('en_proceso', this)">
+            👨‍🍳 En Proceso
+          </button>
+          <button class="tab-btn" data-filter="entregando" onclick="setFilter('entregando', this)">
+            🛎️ Entregando
+          </button>
+          <button class="tab-btn" data-filter="completado" onclick="setFilter('completado', this)">
+            ✅ Completados
+          </button>
+        </div>
+
+        <!-- LISTA DE PEDIDOS -->
+        <div id="orders-grid" class="grid-auto">
+          <!-- Se llena dinámicamente -->
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="empty-orders" class="empty-state hidden">
+          <div class="empty-state-icon">🍳</div>
+          <h3>¡Todo listo!</h3>
+          <p>No hay pedidos pendientes en este momento.<br>Esperando nuevos pedidos...</p>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <style>
+    .order-card-cocina {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      position: relative;
+      transition: var(--transition);
+      animation: slideInLeft 0.35s ease forwards;
+    }
+
+    .order-card-cocina.en_espera  { border-left: 4px solid var(--status-wait); }
+    .order-card-cocina.en_proceso { border-left: 4px solid var(--status-process); }
+    .order-card-cocina.entregando { border-left: 4px solid var(--status-deliver); }
+    .order-card-cocina.completado { border-left: 4px solid var(--status-done); opacity: 0.55; }
+
+    .order-card-cocina:hover { background: var(--card-hover); }
+
+    .order-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .order-num {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--salmon);
+    }
+
+    .order-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .order-items-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 16px 0;
+    }
+
+    .order-item-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.875rem;
+    }
+
+    .order-item-qty {
+      background: var(--black-3);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--salmon);
+      flex-shrink: 0;
+    }
+
+    .order-notes {
+      font-size: 0.8rem;
+      color: var(--yellow);
+      background: var(--yellow-glow);
+      border: 1px solid var(--yellow-border);
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      margin-top: 8px;
+    }
+
+    .status-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .status-btn {
+      flex: 1;
+      min-width: 100px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--card-border);
+      background: var(--black-3);
+      color: var(--text-secondary);
+      font-family: var(--font-primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      text-align: center;
+    }
+
+    .status-btn:hover { border-color: var(--salmon); color: var(--salmon); background: var(--salmon-glow); }
+    .status-btn.active-espera   { background: rgba(255,208,96,0.2);  border-color: var(--status-wait);    color: var(--status-wait); }
+    .status-btn.active-proceso  { background: rgba(255,107,107,0.2); border-color: var(--status-process); color: var(--status-process); }
+    .status-btn.active-entrega  { background: rgba(78,205,196,0.2);  border-color: var(--status-deliver); color: var(--status-deliver); }
+    .status-btn.active-done     { background: rgba(149,224,138,0.2); border-color: var(--status-done);    color: var(--status-done); }
+
+    .new-order-flash {
+      animation: flashCard 0.6s ease;
+    }
+
+    @keyframes flashCard {
+      0%   { box-shadow: 0 0 0 0 rgba(255,107,107,0.8); }
+      50%  { box-shadow: 0 0 0 12px rgba(255,107,107,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); }
+    }
+  </style>
+
+  <script type="module" src="/src/js/cocina.js"></script>
+</body>
+</html>

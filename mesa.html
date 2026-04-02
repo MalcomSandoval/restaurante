@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Menú | Mesa</title>
+  <meta name="description" content="Haz tu pedido desde la mesa. Ve el menú, elige tus platos y paga fácilmente." />
+  <link rel="stylesheet" href="/src/css/styles.css" />
+</head>
+<body>
+  <div class="bg-orbs"></div>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <div class="navbar-logo">🍽️</div>
+        <div>
+          <div class="navbar-title" id="restaurant-name">Restaurante</div>
+          <div class="navbar-subtitle" id="table-label">Cargando mesa...</div>
+        </div>
+      </a>
+      <span class="navbar-badge cliente" id="mesa-badge">📍 Mesa —</span>
+    </div>
+  </nav>
+
+  <!-- PANTALLA DE BIENVENIDA (auto se oculta) -->
+  <div id="welcome-screen" class="welcome-screen">
+    <div class="welcome-card">
+      <div class="welcome-emoji">👋</div>
+      <h2>¡Bienvenido!</h2>
+      <p id="welcome-text">Estás en la <strong>Mesa #1</strong></p>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-top:8px">
+        Revisa el menú y haz tu pedido desde aquí
+      </p>
+      <div class="spinner" style="margin-top:24px"></div>
+    </div>
+  </div>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="mesa-main hidden" id="main-content">
+    <div class="container">
+
+      <!-- TRACKER DE ESTADO DEL PEDIDO (se muestra si hay pedido activo) -->
+      <div id="order-status-bar" class="order-status-bar hidden">
+        <div class="status-bar-content">
+          <div class="flex items-center gap-12">
+            <span style="font-size:1.2rem">📋</span>
+            <div>
+              <div style="font-size:0.85rem;font-weight:600" id="status-order-num">Pedido #—</div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">Estado de tu pedido</div>
+            </div>
+          </div>
+          <div id="status-badge-wrap"></div>
+        </div>
+        <div class="order-tracker mt-16" id="order-tracker">
+          <div class="tracker-step" id="step-espera">
+            <div class="tracker-dot">⏳</div>
+            <div class="tracker-label">En Espera</div>
+          </div>
+          <div class="tracker-step" id="step-proceso">
+            <div class="tracker-dot">👨‍🍳</div>
+            <div class="tracker-label">En Proceso</div>
+          </div>
+          <div class="tracker-step" id="step-entregando">
+            <div class="tracker-dot">🛎️</div>
+            <div class="tracker-label">En Camino</div>
+          </div>
+          <div class="tracker-step" id="step-listo">
+            <div class="tracker-dot">✅</div>
+            <div class="tracker-label">¡Listo!</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTROS DE CATEGORÍA -->
+      <div class="category-nav">
+        <div class="tabs" id="category-tabs">
+          <button class="tab-btn active" data-cat="all">
+            🍽️ Todo el menú
+          </button>
+          <!-- Se llenan dinámicamente -->
+        </div>
+      </div>
+
+      <!-- GRID DE MENÚ -->
+      <div class="menu-grid grid-auto" id="menu-grid">
+        <!-- Se llena dinámicamente -->
+      </div>
+
+    </div>
+  </main>
+
+  <!-- CARRITO FLOTANTE -->
+  <button class="cart-fab hidden" id="cart-fab" onclick="openCart()">
+    🛒 Mi pedido
+    <span class="cart-count" id="cart-count">0</span>
+  </button>
+
+  <!-- MODAL CARRITO -->
+  <div class="modal-overlay" id="cart-modal">
+    <div class="modal" style="max-width:540px;max-height:90vh;overflow-y:auto">
+      <div class="modal-header">
+        <h3 style="font-family:var(--font-display);font-size:1.2rem">🛒 Mi Pedido</h3>
+        <button class="modal-close" onclick="closeCart()">✕</button>
+      </div>
+
+      <div id="cart-items">
+        <!-- Items del carrito -->
+      </div>
+
+      <div id="cart-empty" class="empty-state" style="padding:40px 0">
+        <div class="empty-state-icon">🛒</div>
+        <h3>Nada aquí aún</h3>
+        <p>Agrega platos del menú para empezar</p>
+      </div>
+
+      <!-- RESUMEN -->
+      <div id="cart-summary" class="hidden">
+        <div class="divider"></div>
+        <div class="cart-totals">
+          <div class="cart-total-row">
+            <span>Subtotal</span>
+            <span id="cart-subtotal">$0</span>
+          </div>
+          <div class="cart-total-row">
+            <span>IVA (19%)</span>
+            <span id="cart-tax">$0</span>
+          </div>
+          <div class="cart-total-row total">
+            <span>Total</span>
+            <span id="cart-total">$0</span>
+          </div>
+        </div>
+
+        <!-- NOTA ESPECIAL -->
+        <div class="form-group mt-16">
+          <label class="form-label">📝 Nota para cocina (opcional)</label>
+          <textarea class="form-textarea" id="cart-note" placeholder="Ej: sin cebolla, sin picante, alergia a mariscos..." rows="2"></textarea>
+        </div>
+
+        <!-- MÉTODO DE PAGO (informativo) -->
+        <div class="payment-choice mt-16">
+          <div class="form-label mb-8">💳 ¿Cómo vas a pagar?</div>
+          <div class="grid-2">
+            <label class="pay-opt" id="pay-cash">
+              <input type="radio" name="pay_method" value="efectivo" checked />
+              <div class="pay-opt-inner">
+                <span>💵</span>
+                <span>Efectivo</span>
+              </div>
+            </label>
+            <label class="pay-opt" id="pay-transfer">
+              <input type="radio" name="pay_method" value="transferencia" />
+              <div class="pay-opt-inner">
+                <span>📱</span>
+                <span>Transferencia</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- DATOS TRANSFERENCIA (condicional) -->
+        <div id="transfer-info-box" class="hidden card-yellow mt-16">
+          <p style="font-size:0.8rem;font-weight:600;margin-bottom:12px">📲 Datos para transferencia:</p>
+          <div id="transfer-details" style="font-size:0.82rem;line-height:2;color:var(--text-secondary)"></div>
+          <div class="form-group mt-12" style="margin-bottom:0">
+            <label class="form-label">Subir comprobante de pago</label>
+            <input type="file" id="receipt-upload" accept="image/*" class="form-input" style="padding:8px" />
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-lg btn-full mt-24" id="confirm-order-btn" onclick="confirmOrder()">
+          ✅ Confirmar Pedido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PEDIDO CONFIRMADO -->
+  <div class="modal-overlay" id="success-modal">
+    <div class="modal" style="text-align:center">
+      <div style="font-size:4rem;margin-bottom:16px">🎉</div>
+      <h3 style="font-family:var(--font-display);font-size:1.5rem;margin-bottom:8px">
+        ¡Pedido enviado!
+      </h3>
+      <p style="color:var(--text-muted);margin-bottom:16px">Tu pedido ya está en cocina</p>
+      <div class="card-salmon" style="text-align:left;margin:24px 0">
+        <div style="font-size:2rem;font-weight:800;color:var(--salmon)" id="success-order-num">ORD-0000</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px">Número de pedido</div>
+      </div>
+      <p style="font-size:0.85rem;color:var(--text-secondary)">
+        Puedes ver el estado de tu pedido en esta misma pantalla ⬆️
+      </p>
+      <button class="btn btn-primary btn-full mt-24" onclick="closeSuccess()">
+        Seguir el pedido
+      </button>
+    </div>
+  </div>
+
+  <style>
+    .welcome-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--black);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.3s ease;
+      transition: opacity 0.5s ease;
+    }
+    .welcome-card {
+      text-align: center;
+      padding: 48px 32px;
+    }
+    .welcome-emoji {
+      font-size: 4rem;
+      margin-bottom: 24px;
+      animation: bounce 1s ease infinite alternate;
+    }
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-10px); }
+    }
+    .welcome-card h2 {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .mesa-main {
+      padding: 24px 0 120px;
+    }
+
+    .order-status-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--salmon-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 24px;
+      animation: slideInLeft 0.4s ease;
+    }
+
+    .status-bar-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .category-nav {
+      margin-bottom: 28px;
+      overflow-x: auto;
+    }
+
+    .menu-grid {
+      padding-bottom: 24px;
+    }
+
+    /* Cart */
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .cart-item-icon {
+      font-size: 1.5rem;
+      width: 40px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .cart-item-info { flex: 1; }
+    .cart-item-name { font-size: 0.9rem; font-weight: 600; }
+    .cart-item-price { font-size: 0.8rem; color: var(--salmon); }
+
+    .cart-item-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px;
+      transition: var(--transition);
+    }
+    .cart-item-remove:hover { color: var(--salmon); }
+
+    .cart-totals { display: flex; flex-direction: column; gap: 8px; }
+    .cart-total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+    .cart-total-row.total {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      padding-top: 8px;
+      border-top: 1px solid var(--card-border);
+      margin-top: 8px;
+    }
+
+    .pay-opt { cursor: pointer; }
+    .pay-opt input { display: none; }
+    .pay-opt-inner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+    .pay-opt input:checked ~ .pay-opt-inner {
+      border-color: var(--salmon);
+      background: var(--salmon-glow);
+      color: var(--salmon);
+    }
+  </style>
+
+  <script type="module" src="/src/js/mesa.js"></script>
+</body>
+</html>
