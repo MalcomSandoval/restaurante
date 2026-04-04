@@ -1,13 +1,13 @@
 // =====================================================
-// MESA.JS - Lógica del portal de cliente en mesa
+// MESA.JS - Portal de cliente en mesa con Supabase
 // =====================================================
 
 import '../css/styles.css'
 import {
   generateId, generateOrderNumber,
-  saveOrder, getOrderById, getAllOrders,
+  saveOrder, getOrderById,
   getCart, addToCart, removeFromCart, clearCart, getCartTotal, saveCart,
-  showToast, startPolling, timeAgo, formatTime
+  showToast, subscribeToOrder, timeAgo, formatTime
 } from './app.js'
 import {
   RESTAURANT_NAME, CATEGORIES, MENU_ITEMS,
@@ -21,36 +21,33 @@ let mesa = null
 let mesaNum = null
 let cartKey = 'cart'
 let activeOrderId = null
-let pollingInterval = null
+let unsubscribeOrder = null
 let currentCat = 'all'
 
 // =====================================================
 // INICIALIZACIÓN
 // =====================================================
 async function init() {
-  // Leer número de mesa desde URL
   const params = new URLSearchParams(window.location.search)
   const mesaParam = params.get('mesa') || params.get('token') || '1'
   mesaNum = mesaParam
   cartKey = `cart_mesa_${mesaNum}`
 
-  // Actualizar UI
   document.getElementById('restaurant-name').textContent = RESTAURANT_NAME
   document.getElementById('table-label').textContent = `Mesa #${mesaNum}`
   document.getElementById('mesa-badge').textContent = `📍 Mesa #${mesaNum}`
   document.getElementById('welcome-text').innerHTML = `Estás en la <strong>Mesa #${mesaNum}</strong>`
 
-  // Auto-ocultar pantalla de bienvenida
   setTimeout(() => {
     const ws = document.getElementById('welcome-screen')
     ws.style.opacity = '0'
-    setTimeout(() => {
+    setTimeout(async () => {
       ws.style.display = 'none'
       document.getElementById('main-content').classList.remove('hidden')
       renderCategoryTabs()
       renderMenu()
       updateCartBadge()
-      checkActiveOrder()
+      await checkActiveOrder()
     }, 500)
   }, 1800)
 }
@@ -128,7 +125,6 @@ window.addItem = function(itemId) {
   showToast(`${item.icon} ${item.name} agregado`, 'success', 2000)
   updateCartBadge()
 
-  // Animación en el botón
   const btn = event.target
   btn.style.transform = 'scale(1.4)'
   setTimeout(() => btn.style.transform = '', 200)
@@ -193,7 +189,6 @@ function renderCartModal() {
     itemsEl.appendChild(row)
   })
 
-  // Totales
   const subtotal = getCartTotal(cart)
   const tax = calcTax(subtotal)
   const total = calcTotal(subtotal)
@@ -202,7 +197,6 @@ function renderCartModal() {
   document.getElementById('cart-tax').textContent = formatCOP(tax)
   document.getElementById('cart-total').textContent = formatCOP(total)
 
-  // Transferencia info
   const transferDetails = document.getElementById('transfer-details')
   transferDetails.innerHTML = `
     <div>🏦 <strong>${TRANSFER_INFO.bank}</strong> — ${TRANSFER_INFO.account_type}</div>
@@ -231,7 +225,6 @@ window.removeItem = function(itemId) {
   if (getCart(cartKey).length === 0) closeCart()
 }
 
-// Mostrar/ocultar info de transferencia
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="pay_method"]').forEach(radio => {
     radio.addEventListener('change', () => {
@@ -242,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // =====================================================
-// CONFIRMAR PEDIDO
+// CONFIRMAR PEDIDO (async — guarda en Supabase)
 // =====================================================
 window.confirmOrder = async function() {
   const cart = getCart(cartKey)
@@ -258,7 +251,6 @@ window.confirmOrder = async function() {
   const payMethod = document.querySelector('input[name="pay_method"]:checked')?.value || 'efectivo'
   const note = document.getElementById('cart-note')?.value || ''
 
-  // Comprobante de pago (si transferencia)
   let receiptBase64 = null
   if (payMethod === 'transferencia') {
     const fileInput = document.getElementById('receipt-upload')
@@ -300,20 +292,24 @@ window.confirmOrder = async function() {
     }
   }
 
-  saveOrder(order)
-  activeOrderId = orderId
-  sessionStorage.setItem(`active_order_mesa_${mesaNum}`, orderId)
+  try {
+    await saveOrder(order)
+    activeOrderId = orderId
+    sessionStorage.setItem(`active_order_mesa_${mesaNum}`, orderId)
 
-  clearCart(cartKey)
-  updateCartBadge()
-  closeCart()
+    clearCart(cartKey)
+    updateCartBadge()
+    closeCart()
 
-  // Mostrar modal éxito
-  document.getElementById('success-order-num').textContent = orderNum
-  document.getElementById('success-modal').classList.add('active')
+    document.getElementById('success-order-num').textContent = orderNum
+    document.getElementById('success-modal').classList.add('active')
 
-  // Iniciar seguimiento
-  startOrderTracking(orderId)
+    startOrderTracking(orderId)
+  } catch (err) {
+    showToast('Error al enviar pedido. Verifica tu conexión.', 'error')
+    btn.disabled = false
+    btn.textContent = '🛎️ Confirmar Pedido'
+  }
 }
 
 window.closeSuccess = function() {
@@ -321,27 +317,27 @@ window.closeSuccess = function() {
 }
 
 // =====================================================
-// TRACKING DEL PEDIDO
+// TRACKING DEL PEDIDO (Supabase Realtime)
 // =====================================================
-function checkActiveOrder() {
+async function checkActiveOrder() {
   const storedId = sessionStorage.getItem(`active_order_mesa_${mesaNum}`)
-  if (storedId) {
-    const order = getOrderById(storedId)
-    if (order && !['completado', 'cancelado'].includes(order.status)) {
-      activeOrderId = storedId
-      showOrderStatusBar(order)
-      startOrderTracking(storedId)
-      return
-    }
+  if (!storedId) return
+
+  const order = await getOrderById(storedId)
+  if (order && !['completado', 'cancelado'].includes(order.status)) {
+    activeOrderId = storedId
+    showOrderStatusBar(order)
+    startOrderTracking(storedId)
   }
 }
 
 function startOrderTracking(orderId) {
-  if (pollingInterval) clearInterval(pollingInterval)
-  pollingInterval = startPolling(() => {
-    const order = getOrderById(orderId)
-    if (order) showOrderStatusBar(order)
-  }, 2000)
+  // Cancelar suscripción anterior
+  if (unsubscribeOrder) unsubscribeOrder()
+
+  unsubscribeOrder = subscribeToOrder(orderId, (order) => {
+    showOrderStatusBar(order)
+  })
 }
 
 function showOrderStatusBar(order) {
@@ -349,7 +345,6 @@ function showOrderStatusBar(order) {
   bar.classList.remove('hidden')
   document.getElementById('status-order-num').textContent = order.order_number
 
-  // Badge de estado
   const statusMap = {
     en_espera:  { label: '⏳ En Espera',  class: 'badge-wait' },
     en_proceso: { label: '👨‍🍳 En Proceso', class: 'badge-process' },
@@ -360,23 +355,19 @@ function showOrderStatusBar(order) {
   document.getElementById('status-badge-wrap').innerHTML =
     `<span class="badge ${s.class}">${s.label}</span>`
 
-  // Tracker pasos
   const steps = ['en_espera', 'en_proceso', 'entregando', 'completado']
   const idx = steps.indexOf(order.status)
   const stepIds = ['step-espera', 'step-proceso', 'step-entregando', 'step-listo']
   stepIds.forEach((id, i) => {
     const el = document.getElementById(id)
-    el.classList.toggle('done',   i < idx)
-    el.classList.toggle('active', i === idx)
-    el.classList.remove('done')
+    el.classList.remove('done', 'active')
     if (i < idx) el.classList.add('done')
     if (i === idx) el.classList.add('active')
-    if (i > idx) { el.classList.remove('done'); el.classList.remove('active') }
   })
 }
 
 // =====================================================
-// UTILIDAD: FILE TO BASE64
+// UTIL
 // =====================================================
 function fileToBase64(file) {
   return new Promise((resolve) => {
@@ -386,7 +377,4 @@ function fileToBase64(file) {
   })
 }
 
-// =====================================================
-// ARRANCAR
-// =====================================================
 init()

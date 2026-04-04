@@ -1,18 +1,18 @@
 // =====================================================
-// COCINA.JS - Lógica del display de cocina
+// COCINA.JS - Display de cocina con Supabase Realtime
 // =====================================================
 
 import '../css/styles.css'
 import {
   checkRoleAuth, verifyPin, logout,
-  getAllOrders, getActiveOrders, updateOrderStatus,
-  showToast, playNotificationSound, startPolling,
+  getAllOrders, getAllOrdersSync, updateOrderStatus,
+  showToast, playNotificationSound, subscribeToOrders,
   timeAgo, formatTime
 } from './app.js'
 import { formatCOP, RESTAURANT_NAME } from './menu-data.js'
 
 let currentFilter = 'activos'
-let pollingInterval = null
+let unsubscribe = null
 let knownOrderIds = new Set()
 
 // =====================================================
@@ -33,6 +33,7 @@ window.loginCocina = function() {
 }
 
 window.logoutCocina = function() {
+  if (unsubscribe) unsubscribe()
   logout('cocina')
   window.location.reload()
 }
@@ -40,23 +41,23 @@ window.logoutCocina = function() {
 // =====================================================
 // INICIALIZAR DASHBOARD
 // =====================================================
-function initDashboard() {
+async function initDashboard() {
   updateClock()
   setInterval(updateClock, 1000)
 
-  // Cargar pedidos iniciales y marcar IDs conocidos
-  const initial = getAllOrders()
+  // Carga inicial para marcar IDs ya conocidos
+  const initial = await getAllOrders()
   initial.forEach(o => knownOrderIds.add(o.id))
 
-  renderOrders()
-  updateStats()
+  renderOrders(initial)
+  updateStats(initial)
 
-  // Polling cada 2 segundos
-  pollingInterval = startPolling(() => {
-    checkNewOrders()
-    renderOrders()
-    updateStats()
-  }, 2000)
+  // Suscribir a cambios en tiempo real
+  unsubscribe = subscribeToOrders((orders) => {
+    checkNewOrders(orders)
+    renderOrders(orders)
+    updateStats(orders)
+  })
 }
 
 function updateClock() {
@@ -71,13 +72,12 @@ function updateClock() {
 // =====================================================
 // DETECTAR NUEVOS PEDIDOS
 // =====================================================
-function checkNewOrders() {
-  const orders = getAllOrders()
+function checkNewOrders(orders) {
   orders.forEach(order => {
     if (!knownOrderIds.has(order.id)) {
       knownOrderIds.add(order.id)
       playNotificationSound()
-      showToast(`🆕 Nuevo pedido ${order.order_number} — Mesa ${order.mesa || 'Domicilio'}`, 'info', 5000)
+      showToast(`🆕 Nuevo pedido ${order.order_number} — ${order.type === 'domicilio' ? 'Domicilio' : `Mesa ${order.mesa}`}`, 'info', 5000)
     }
   })
 }
@@ -89,11 +89,10 @@ window.setFilter = function(filter, btn) {
   currentFilter = filter
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
   btn.classList.add('active')
-  renderOrders()
+  renderOrders(getAllOrdersSync())
 }
 
-function getFilteredOrders() {
-  const all = getAllOrders()
+function getFilteredOrders(all) {
   const sorted = [...all].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
   switch (currentFilter) {
@@ -109,8 +108,8 @@ function getFilteredOrders() {
 // =====================================================
 // RENDER PEDIDOS
 // =====================================================
-function renderOrders() {
-  const orders = getFilteredOrders()
+function renderOrders(allOrders) {
+  const orders = getFilteredOrders(allOrders || getAllOrdersSync())
   const grid = document.getElementById('orders-grid')
   const empty = document.getElementById('empty-orders')
 
@@ -122,8 +121,6 @@ function renderOrders() {
 
   empty.classList.add('hidden')
 
-  // Actualizar tarjetas existentes o agregar nuevas (evitar re-render completo)
-  const existingIds = new Set([...grid.querySelectorAll('[data-order-id]')].map(el => el.dataset.orderId))
   const newIds = new Set(orders.map(o => o.id))
 
   // Eliminar tarjetas que ya no aplican al filtro
@@ -136,9 +133,7 @@ function renderOrders() {
     const html = buildOrderCard(order)
 
     if (existing) {
-      // Actualizar solo si el estado cambió
-      const currentStatus = existing.dataset.status
-      if (currentStatus !== order.status) {
+      if (existing.dataset.status !== order.status) {
         existing.outerHTML = html
       }
     } else {
@@ -179,7 +174,6 @@ function buildOrderCard(order) {
   const elapsed = timeAgo(order.created_at)
   const isUrgent = getMinutesAgo(order.created_at) > 15
 
-  // Botones de estado
   const statusBtns = isDone ? `
     <div style="font-size:0.8rem;color:var(--status-done);text-align:center;padding:8px">
       ✅ Pedido completado — ${formatTime(order.updated_at)}
@@ -229,20 +223,22 @@ function buildOrderCard(order) {
 }
 
 // =====================================================
-// CAMBIAR ESTADO
+// CAMBIAR ESTADO (async)
 // =====================================================
-window.changeStatus = function(orderId, newStatus) {
-  updateOrderStatus(orderId, newStatus)
-  showToast(`Estado actualizado: ${newStatus.replace('_', ' ')}`, 'success', 2000)
-  renderOrders()
-  updateStats()
+window.changeStatus = async function(orderId, newStatus) {
+  const result = await updateOrderStatus(orderId, newStatus)
+  if (result) {
+    showToast(`Estado actualizado: ${newStatus.replace('_', ' ')}`, 'success', 2000)
+  } else {
+    showToast('Error al actualizar estado', 'error')
+  }
 }
 
 // =====================================================
 // STATS
 // =====================================================
-function updateStats() {
-  const all = getAllOrders()
+function updateStats(allOrders) {
+  const all = allOrders || getAllOrdersSync()
   const today = new Date().toDateString()
 
   document.getElementById('stat-espera').textContent =

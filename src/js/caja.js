@@ -1,21 +1,22 @@
 // =====================================================
-// CAJA.JS - Lógica del portal de Caja & Facturación
+// CAJA.JS - Portal de Caja & Facturación con Supabase
 // =====================================================
 
 import '../css/styles.css'
 import {
   checkRoleAuth, verifyPin, logout,
-  getAllOrders, updateOrderStatus, updateOrderPayment,
-  showToast, startPolling, formatTime, timeAgo
+  getAllOrders, getAllOrdersSync, updateOrderStatus, updateOrderPayment,
+  showToast, subscribeToOrders, formatTime, timeAgo
 } from './app.js'
 import {
   formatCOP, calcTax, calcTotal, RESTAURANT_NAME, TRANSFER_INFO
 } from './menu-data.js'
 
 let currentTab = 'pendientes'
-let pollingInterval = null
+let unsubscribe = null
 let currentOrderId = null
 let currentPayMethod = null
+let cachedOrders = []
 
 // =====================================================
 // LOGIN
@@ -33,6 +34,7 @@ window.loginCaja = function () {
 }
 
 window.logoutCaja = function () {
+  if (unsubscribe) unsubscribe()
   logout('caja')
   window.location.reload()
 }
@@ -40,17 +42,22 @@ window.logoutCaja = function () {
 // =====================================================
 // INIT
 // =====================================================
-function initCaja() {
+async function initCaja() {
   const now = new Date()
   document.getElementById('caja-date').textContent =
     now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
+  // Carga inicial
+  cachedOrders = await getAllOrders()
   renderOrders()
   updateDayStats()
-  pollingInterval = startPolling(() => {
+
+  // Suscripción Realtime
+  unsubscribe = subscribeToOrders((orders) => {
+    cachedOrders = orders
     renderOrders()
     updateDayStats()
-  }, 2500)
+  })
 }
 
 // =====================================================
@@ -67,14 +74,12 @@ window.setTab = function (tab, btn) {
 // FILTRAR PEDIDOS POR TAB
 // =====================================================
 function getOrdersForTab() {
-  const all = getAllOrders()
+  const all = cachedOrders
   const today = new Date().toDateString()
-
   const isToday = o => new Date(o.created_at).toDateString() === today
 
   switch (currentTab) {
     case 'pendientes':
-      // Pedidos listos para cobrar (entregando o completado sin pagar)
       return all.filter(o =>
         ['entregando', 'en_espera', 'en_proceso'].includes(o.status) ||
         (o.status === 'completado' && !o.pago?.pagado)
@@ -108,7 +113,6 @@ function renderOrders() {
     return
   }
   empty.classList.add('hidden')
-
   list.innerHTML = orders.map(order => buildOrderRow(order)).join('')
 }
 
@@ -165,7 +169,7 @@ function buildOrderRow(order) {
 window.openFactura = function (orderId, readOnly = false) {
   currentOrderId = orderId
   currentPayMethod = null
-  const order = getAllOrders().find(o => o.id === orderId)
+  const order = cachedOrders.find(o => o.id === orderId)
   if (!order) return
 
   const content = document.getElementById('factura-content')
@@ -282,7 +286,6 @@ function buildFacturaHTML(order, readOnly) {
       <button class="modal-close" onclick="closeFactura()">✕</button>
     </div>
 
-    <!-- ENCABEZADO FACTURA (IMPRIMIBLE) -->
     <div class="factura-header">
       <div class="factura-logo-print">🍽️</div>
       <div class="factura-title">${RESTAURANT_NAME}</div>
@@ -297,7 +300,6 @@ function buildFacturaHTML(order, readOnly) {
 
     <div class="divider"></div>
 
-    <!-- DATOS CLIENTE (DOMICILIO) -->
     ${order.type === 'domicilio' && order.cliente ? `
       <div style="font-size:0.8rem;margin-bottom:16px;line-height:1.8;color:var(--text-secondary)">
         <strong>Cliente:</strong> ${order.cliente.nombre}<br>
@@ -306,7 +308,6 @@ function buildFacturaHTML(order, readOnly) {
       </div>
     ` : ''}
 
-    <!-- TABLA DE ÍTEMS -->
     <table class="factura-table">
       <thead>
         <tr>
@@ -319,7 +320,6 @@ function buildFacturaHTML(order, readOnly) {
       <tbody>${itemsRows}</tbody>
     </table>
 
-    <!-- TOTALES -->
     <div class="factura-totals">
       <div class="factura-total-row">
         <span>Subtotal (sin IVA)</span>
@@ -356,12 +356,6 @@ window.selectPayMethod = function (method) {
   document.getElementById('no-method-msg').classList.add('hidden')
   document.getElementById('btn-efectivo').classList.toggle('selected', method === 'efectivo')
   document.getElementById('btn-transferencia').classList.toggle('selected', method === 'transferencia')
-
-  // Pre-seleccionar si el cliente ya eligió método
-  const order = getAllOrders().find(o => o.id === currentOrderId)
-  if (order?.pago?.metodo === 'transferencia' && method === 'transferencia') {
-    document.getElementById('btn-transferencia').classList.add('selected')
-  }
 }
 
 // =====================================================
@@ -375,9 +369,9 @@ window.calcVuelto = function (total) {
 }
 
 // =====================================================
-// PROCESAR PAGO
+// PROCESAR PAGO (async)
 // =====================================================
-window.procesarPago = function (method, total) {
+window.procesarPago = async function (method, total) {
   if (!currentOrderId) return
 
   let montoRecibido = total
@@ -392,19 +386,25 @@ window.procesarPago = function (method, total) {
     vuelto = montoRecibido - total
   }
 
-  updateOrderPayment(currentOrderId, {
-    metodo: method,
-    pagado: true,
-    monto_recibido: montoRecibido,
-    vuelto: vuelto,
-    verificado_en: new Date().toISOString()
-  })
-  updateOrderStatus(currentOrderId, 'completado')
+  const btn = document.querySelector('#factura-modal .btn-primary, #factura-modal .btn-secondary')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Procesando...' }
 
-  closeFactura()
-  showToast(`✅ Pago registrado — ${method === 'efectivo' ? `Vuelto: ${formatCOP(vuelto)}` : 'Transferencia verificada'}`, 'success', 5000)
-  renderOrders()
-  updateDayStats()
+  try {
+    await updateOrderPayment(currentOrderId, {
+      metodo: method,
+      pagado: true,
+      monto_recibido: montoRecibido,
+      vuelto: vuelto,
+      verificado_en: new Date().toISOString()
+    })
+    await updateOrderStatus(currentOrderId, 'completado')
+
+    closeFactura()
+    showToast(`✅ Pago registrado — ${method === 'efectivo' ? `Vuelto: ${formatCOP(vuelto)}` : 'Transferencia verificada'}`, 'success', 5000)
+  } catch (err) {
+    showToast('Error al procesar pago: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = 'Reintentar' }
+  }
 }
 
 // =====================================================
@@ -412,7 +412,7 @@ window.procesarPago = function (method, total) {
 // =====================================================
 window.openComprobante = function (orderId) {
   currentOrderId = orderId
-  const order = getAllOrders().find(o => o.id === orderId)
+  const order = cachedOrders.find(o => o.id === orderId)
   const modal = document.getElementById('comprobante-modal')
   const img = document.getElementById('comprobante-img')
   const noComp = document.getElementById('no-comprobante')
@@ -426,8 +426,8 @@ window.openComprobante = function (orderId) {
     noComp.classList.remove('hidden')
   }
 
-  document.getElementById('verify-transfer-btn').onclick = () => {
-    procesarPago('transferencia', order.total)
+  document.getElementById('verify-transfer-btn').onclick = async () => {
+    await procesarPago('transferencia', order.total)
     closeComprobante()
   }
 
@@ -442,7 +442,7 @@ window.closeComprobante = function () {
 // ESTADÍSTICAS DEL DÍA
 // =====================================================
 function updateDayStats() {
-  const all = getAllOrders()
+  const all = cachedOrders
   const today = new Date().toDateString()
   const todayOrders = all.filter(o => new Date(o.created_at).toDateString() === today)
   const paid = todayOrders.filter(o => o.pago?.pagado)

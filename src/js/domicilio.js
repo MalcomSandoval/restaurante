@@ -1,5 +1,5 @@
 // =====================================================
-// DOMICILIO.JS - Lógica del portal de pedidos domicilio
+// DOMICILIO.JS - Portal de pedidos domicilio con Supabase
 // =====================================================
 
 import '../css/styles.css'
@@ -26,7 +26,6 @@ function init() {
   renderMenu('all')
   updateCartView()
 
-  // Cargar info de transferencia
   document.getElementById('dom-transfer-details').innerHTML = `
     🏦 <strong>${TRANSFER_INFO.bank}</strong> — ${TRANSFER_INFO.account_type}<br>
     📋 Cuenta: <strong>${TRANSFER_INFO.account_number}</strong><br>
@@ -97,7 +96,7 @@ window.addDomItem = function (itemId) {
 }
 
 // =====================================================
-// VISTA DEL CARRITO (mini en paso 1)
+// VISTA DEL CARRITO
 // =====================================================
 function updateCartView() {
   const cart = getCart(CART_KEY)
@@ -171,7 +170,6 @@ window.goToStep = function (step) {
   document.getElementById('step-datos').classList.toggle('hidden', step !== 2)
   document.getElementById('step-pago').classList.toggle('hidden', step !== 3)
 
-  // Actualizar indicadores de pasos
   ;[1, 2, 3, 4].forEach(i => {
     const el = document.getElementById(`step-${i}-dot`)
     if (!el) return
@@ -205,7 +203,7 @@ window.togglePayMethod = function (method) {
 }
 
 // =====================================================
-// CONFIRMAR PEDIDO DOMICILIO
+// CONFIRMAR PEDIDO DOMICILIO (async — guarda en Supabase)
 // =====================================================
 window.confirmarDomicilio = async function () {
   const btn = document.getElementById('dom-confirm-btn')
@@ -261,28 +259,33 @@ window.confirmarDomicilio = async function () {
     }
   }
 
-  saveOrder(order)
-  clearCart(CART_KEY)
+  try {
+    await saveOrder(order)
+    clearCart(CART_KEY)
 
-  // Mostrar confirmación
-  document.getElementById('step-pago').classList.add('hidden')
-  document.getElementById('step-confirmado').classList.remove('hidden')
-  ;[1, 2, 3, 4].forEach(i => {
-    const el = document.getElementById(`step-${i}-dot`)
-    if (el) { el.classList.remove('active'); el.classList.add('done') }
-  })
+    document.getElementById('step-pago').classList.add('hidden')
+    document.getElementById('step-confirmado').classList.remove('hidden')
+    ;[1, 2, 3, 4].forEach(i => {
+      const el = document.getElementById(`step-${i}-dot`)
+      if (el) { el.classList.remove('active'); el.classList.add('done') }
+    })
 
-  document.getElementById('conf-order-num').textContent = orderNum
-  document.getElementById('conf-details').innerHTML = `
-    <strong>📍 Dirección:</strong> ${dir}<br>
-    <strong>📞 Teléfono:</strong> ${tel}<br>
-    <strong>💳 Pago:</strong> ${payMethod === 'efectivo' ? '💵 Efectivo contra entrega' : '📱 Transferencia bancaria'}<br>
-    <strong>💰 Total:</strong> ${formatCOP(total)}
-  `
+    document.getElementById('conf-order-num').textContent = orderNum
+    document.getElementById('conf-details').innerHTML = `
+      <strong>📍 Dirección:</strong> ${dir}<br>
+      <strong>📞 Teléfono:</strong> ${tel}<br>
+      <strong>💳 Pago:</strong> ${payMethod === 'efectivo' ? '💵 Efectivo contra entrega' : '📱 Transferencia bancaria'}<br>
+      <strong>💰 Total:</strong> ${formatCOP(total)}
+    `
+  } catch (err) {
+    showToast('Error al enviar pedido. Verifica tu conexión.', 'error')
+    btn.disabled = false
+    btn.textContent = '🛵 Confirmar Pedido'
+  }
 }
 
 // =====================================================
-// UTIL: FILE TO BASE64
+// UTIL
 // =====================================================
 function fileToBase64(file) {
   return new Promise(resolve => {
